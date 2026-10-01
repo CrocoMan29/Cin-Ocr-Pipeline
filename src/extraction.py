@@ -68,6 +68,115 @@ def clean_cnie_number(raw_text: str) -> str:
         return f"{prefix}{suffix}"
     return raw_text.replace(' ', '')
 
+def check_affiliation(recto_data: dict, verso_data: dict) -> dict:
+    """
+    Verifies whether a Verso (back) image belongs to the same Moroccan citizen as the Recto (front).
+    Cross-checks:
+      1. Primary: National ID number (CNIE).
+      2. Secondary: Date of birth (visual front vs back MRZ).
+      3. Tertiary: Expiry date (visual front vs back MRZ).
+      4. Quaternary: First & Last Names (visual front vs back MRZ Line 3).
+    Returns an affiliation dictionary with boolean flag, status string, and clear rationale.
+    """
+    r_cnie = recto_data.get("cnie_number", "").strip().upper()
+    v_cnie = verso_data.get("cnie_number", "").strip().upper()
+    mrz = verso_data.get("mrz", {})
+    mrz_cnie = (mrz.get("cnie_number") or "").strip().upper()
+
+    # If verso visual CNIE wasn't found, try MRZ CNIE
+    effective_v_cnie = v_cnie if v_cnie and v_cnie != "NOT DETECTED" else mrz_cnie
+
+    cnie_checked = bool(r_cnie and r_cnie != "NOT DETECTED" and effective_v_cnie and effective_v_cnie != "NOT DETECTED")
+    cnie_match = None
+    if cnie_checked:
+        r_clean = re.sub(r'[^A-Z0-9]', '', r_cnie)
+        v_clean = re.sub(r'[^A-Z0-9]', '', effective_v_cnie)
+        cnie_match = (r_clean == v_clean)
+
+    # Date of Birth check
+    r_dob = recto_data.get("birth_date", "").strip()
+    mrz_dob = (mrz.get("birth_date") or "").strip()
+    dob_checked = bool(r_dob and r_dob != "NOT DETECTED" and mrz_dob)
+    dob_match = (r_dob == mrz_dob) if dob_checked else None
+
+    # Expiry Date check
+    r_exp = recto_data.get("expiry_date", "").strip()
+    mrz_exp = (mrz.get("expiry_date") or "").strip()
+    exp_checked = bool(r_exp and r_exp != "NOT DETECTED" and mrz_exp)
+    exp_match = (r_exp == mrz_exp) if exp_checked else None
+
+    # Name check (MRZ Line 3 vs visual recto)
+    r_last = (recto_data.get("last_name") or "").strip().upper()
+    r_first = (recto_data.get("first_name") or "").strip().upper()
+    m_last = (mrz.get("last_name") or "").strip().upper()
+    m_first = (mrz.get("first_name") or "").strip().upper()
+
+    name_match = None
+    if (r_last and r_last != "NOT DETECTED") and m_last:
+        last_ok = (r_last in m_last) or (m_last in r_last) or (r_last.replace(" ", "") == m_last.replace(" ", ""))
+        first_ok = True
+        if (r_first and r_first != "NOT DETECTED") and m_first:
+            first_ok = (r_first in m_first) or (m_first in r_first) or (r_first.replace(" ", "") == m_first.replace(" ", ""))
+        name_match = last_ok or first_ok
+
+    # Decision Logic:
+    # 1. Definite Mismatch: CNIEs are present on both sides and do not match
+    if cnie_match is False:
+        return {
+            "is_affiliated": False,
+            "status": "mismatch",
+            "cnie_match": False,
+            "dob_match": dob_match,
+            "name_match": name_match,
+            "details": f"Affiliation mismatch: Front CNIE '{r_cnie}' does not match Back CNIE '{effective_v_cnie}'. These cards belong to two different individuals."
+        }
+
+    # 2. Definite Mismatch: MRZ DOB mismatch when front visual DOB is confident
+    if dob_match is False and cnie_checked is False:
+        return {
+            "is_affiliated": False,
+            "status": "mismatch",
+            "cnie_match": False,
+            "dob_match": False,
+            "name_match": name_match,
+            "details": f"Affiliation mismatch: Front Date of Birth '{r_dob}' does not match Back MRZ '{mrz_dob}'."
+        }
+
+    # 3. Positive Match: CNIEs match
+    if cnie_match is True:
+        details = f"Verified: Front and Back CNIE match ('{r_cnie}')."
+        if dob_match is True:
+            details += f" Date of birth ('{r_dob}') also verified."
+        return {
+            "is_affiliated": True,
+            "status": "verified",
+            "cnie_match": True,
+            "dob_match": dob_match,
+            "name_match": name_match,
+            "details": details
+        }
+
+    # 4. Positive Match via MRZ (when CNIE was omitted on back, but DOB & name match)
+    if dob_match is True and (name_match is True or exp_match is True):
+        return {
+            "is_affiliated": True,
+            "status": "verified",
+            "cnie_match": False,
+            "dob_match": True,
+            "name_match": name_match,
+            "details": f"Verified via MRZ: Date of Birth '{r_dob}' and identity details match on both sides."
+        }
+
+    # 5. Inconclusive (e.g. Pre-2020 card with no back MRZ and no back CNIE detected)
+    return {
+        "is_affiliated": None,
+        "status": "inconclusive",
+        "cnie_match": False,
+        "dob_match": None,
+        "name_match": None,
+        "details": "Inconclusive: Back side is Pre-2020 without MRZ, and CNIE could not be detected on back for cross-validation."
+    }
+
 class OCREngine:
     def __init__(self, languages=None, use_gpu=False):
         if languages is None:
@@ -81,16 +190,16 @@ class OCREngine:
         Classifies an OCR result as 'recto' (front) or 'verso' (back)
         based on visual keywords and MRZ presence.
         """
-        recto_keywords = {'ROYAUME', 'MAROC', 'CARTE', 'NATIONALE', 'IDENTITE', 'DIDENTITE', 'SPECIMEN', 'VALABLE'}
-        verso_keywords = {'IDMAR', 'FILS', 'FILLE', 'ADRESSE', 'AESSE', 'ETAT', 'CIVIL'}
+        recto_keywords = {'ROYAUME', 'MAROC', 'CARTE', 'NATIONALE', 'IDENTITE', 'DIDENTITE', 'SPECIMEN', 'VALABLE', 'JUSQU'}
+        verso_keywords = {'IDMAR', 'FILS', 'FILLE', 'ADRESSE', 'AESSE', 'ACESSE', 'ETAT', 'CIVIL', 'SEXE', 'BENT', 'BEN'}
 
         recto_score = 0
         verso_score = 0
 
         for _, text, _ in raw_results:
             upper = text.strip().upper()
-            if '<<<' in upper or 'MAR<<<' in upper or upper.startswith('I<MAR'):
-                verso_score += 5
+            if '<<<' in upper or 'MAR<<<' in upper or upper.startswith('I<MAR') or re.search(r'\d{6,}[MF<]\d{6,}', upper.replace(' ', '')):
+                verso_score += 6
             for kw in recto_keywords:
                 if kw in upper:
                     recto_score += 2
@@ -380,18 +489,12 @@ class OCREngine:
     def extract_full_card(self, recto_matrix: np.ndarray, verso_matrix: np.ndarray) -> dict:
         """
         Combines Recto and Verso extraction into a single verified identity record.
-        Cross-validates fields between visual inspection and MRZ.
+        Cross-validates fields between visual inspection and MRZ, and verifies affiliation.
         """
         recto = self.extract_recto(recto_matrix)
         verso = self.extract_verso(verso_matrix)
         mrz = verso.get("mrz", {})
-
-        # Validation checks
-        cnie_match = (
-            recto["cnie_number"] != "Not detected"
-            and verso["cnie_number"] != "Not detected"
-            and recto["cnie_number"] == verso["cnie_number"]
-        )
+        affiliation = check_affiliation(recto, verso)
 
         dob_match = (
             recto["birth_date"] != "Not detected"
@@ -406,7 +509,7 @@ class OCREngine:
         )
 
         return {
-            "cnie_number": recto["cnie_number"],
+            "cnie_number": recto["cnie_number"] if recto["cnie_number"] != "Not detected" else verso["cnie_number"],
             "last_name": recto["last_name"],
             "first_name": recto["first_name"],
             "gender": mrz.get("gender") or verso.get("visual_gender") or "Not detected",
@@ -420,12 +523,18 @@ class OCREngine:
             "address": verso["address"],
             "civil_act": verso["civil_act"],
             "validation": {
-                "cnie_cross_verified": cnie_match,
+                "cnie_cross_verified": bool(affiliation.get("cnie_match")),
                 "birth_date_mrz_verified": dob_match,
                 "expiry_date_mrz_verified": expiry_match,
                 "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
                 "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
-                "mrz_detected": bool(mrz)
+                "mrz_detected": bool(mrz),
+                "card_generation": "Post-2020 CNIE" if bool(mrz) else "Pre-2020 CNIE",
+                "is_affiliated": affiliation["is_affiliated"],
+                "affiliation_status": affiliation["status"],
+                "affiliation_details": affiliation["details"],
+                "sides_detected": ["recto", "verso"],
+                "missing_side": None
             },
             "raw_recto": recto,
             "raw_verso": verso
@@ -433,21 +542,105 @@ class OCREngine:
 
     def process_card_images(self, card_matrices: list) -> dict:
         """
-        Automatic card side identification and routing:
-        Handles 1 or 2 card images regardless of user ordering or orientation.
+        Automatic card side identification, duplicate side detection,
+        missing side diagnosis, and cross-card affiliation validation:
+        Handles 1 or 2 card images regardless of user ordering.
         """
         if not card_matrices:
             raise ValueError("No card images provided to process.")
 
+        # Case 1: Single image provided
         if len(card_matrices) == 1:
             raw = self.reader.readtext(card_matrices[0])
             side = self.classify_card_side(raw)
-            print(f"[Extraction] Auto-detected card side: {side.upper()}")
+            print(f"[Extraction] Single card detected, auto-classified as: {side.upper()}")
             if side == "verso":
-                return {"type": "single_verso", "data": self.extract_verso(card_matrices[0], pre_results=raw)}
-            return {"type": "single_recto", "data": self.extract_recto(card_matrices[0], pre_results=raw)}
+                v_data = self.extract_verso(card_matrices[0], pre_results=raw)
+                mrz = v_data.get("mrz", {})
+                return {
+                    "type": "single_verso",
+                    "sides_detected": ["verso"],
+                    "missing_side": "recto",
+                    "affiliation": {
+                        "is_affiliated": None,
+                        "status": "not_applicable",
+                        "details": "Only VERSO (Back side) was uploaded. RECTO (Front side) is missing."
+                    },
+                    "data": {
+                        "cnie_number": v_data.get("cnie_number", "Not detected"),
+                        "last_name": mrz.get("last_name") or "Not detected",
+                        "first_name": mrz.get("first_name") or "Not detected",
+                        "gender": mrz.get("gender") or v_data.get("visual_gender") or "Not detected",
+                        "nationality": mrz.get("nationality", "MAR"),
+                        "birth_date": mrz.get("birth_date") or "Not detected",
+                        "birth_place": "Not detected",
+                        "expiry_date": mrz.get("expiry_date") or "Not detected",
+                        "photo_path": None,
+                        "father_name": v_data.get("father_name", "Not detected"),
+                        "mother_name": v_data.get("mother_name", "Not detected"),
+                        "address": v_data.get("address", "Not detected"),
+                        "civil_act": v_data.get("civil_act", "Not detected"),
+                        "validation": {
+                            "cnie_cross_verified": False,
+                            "birth_date_mrz_verified": False,
+                            "expiry_date_mrz_verified": False,
+                            "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
+                            "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
+                            "mrz_detected": bool(mrz),
+                            "card_generation": "Post-2020 CNIE (Back)" if bool(mrz) else "Pre-2020 CNIE (Back)",
+                            "is_affiliated": None,
+                            "affiliation_status": "not_applicable",
+                            "affiliation_details": "Verso provided alone; Recto (Front side) is missing.",
+                            "sides_detected": ["verso"],
+                            "missing_side": "recto"
+                        },
+                        "raw_verso": v_data
+                    }
+                }
+            else:
+                r_data = self.extract_recto(card_matrices[0], pre_results=raw)
+                return {
+                    "type": "single_recto",
+                    "sides_detected": ["recto"],
+                    "missing_side": "verso",
+                    "affiliation": {
+                        "is_affiliated": None,
+                        "status": "not_applicable",
+                        "details": "Only RECTO (Front side) was uploaded. VERSO (Back side) is missing."
+                    },
+                    "data": {
+                        "cnie_number": r_data.get("cnie_number", "Not detected"),
+                        "last_name": r_data.get("last_name", "Not detected"),
+                        "first_name": r_data.get("first_name", "Not detected"),
+                        "gender": "Not detected",
+                        "nationality": "MAR",
+                        "birth_date": r_data.get("birth_date", "Not detected"),
+                        "birth_place": r_data.get("birth_place", "Not detected"),
+                        "expiry_date": r_data.get("expiry_date", "Not detected"),
+                        "photo_path": r_data.get("photo_path"),
+                        "father_name": "Not detected",
+                        "mother_name": "Not detected",
+                        "address": "Not detected",
+                        "civil_act": "Not detected",
+                        "validation": {
+                            "cnie_cross_verified": False,
+                            "birth_date_mrz_verified": False,
+                            "expiry_date_mrz_verified": False,
+                            "dob_checksum_valid": False,
+                            "expiry_checksum_valid": False,
+                            "mrz_detected": False,
+                            "card_generation": "Front side scan",
+                            "is_affiliated": None,
+                            "affiliation_status": "not_applicable",
+                            "affiliation_details": "Recto provided alone; Verso (Back side) is missing.",
+                            "sides_detected": ["recto"],
+                            "missing_side": "verso"
+                        },
+                        "raw_recto": r_data
+                    }
+                }
 
-        # Two card matrices (from composite image or 2 separate uploads)
+        # Case 2: Two or more images (from 2 files or composite split)
         raw_1 = self.reader.readtext(card_matrices[0])
         side_1 = self.classify_card_side(raw_1)
 
@@ -457,8 +650,95 @@ class OCREngine:
         print(f"[Extraction] Card 1 auto-classified as: {side_1.upper()}")
         print(f"[Extraction] Card 2 auto-classified as: {side_2.upper()}")
 
+        # Subcase 2A: Duplicate RECTO sides detected (User uploaded two fronts!)
+        if side_1 == "recto" and side_2 == "recto":
+            print("[Extraction] Alert: Both uploaded images classified as RECTO. Verso is missing!")
+            recto_1 = self.extract_recto(card_matrices[0], pre_results=raw_1)
+            recto_2 = self.extract_recto(card_matrices[1], pre_results=raw_2)
+            primary = recto_1 if recto_1["cnie_number"] != "Not detected" else recto_2
+            return {
+                "type": "duplicate_recto",
+                "sides_detected": ["recto", "recto"],
+                "missing_side": "verso",
+                "affiliation": {
+                    "is_affiliated": None,
+                    "status": "duplicate_side",
+                    "details": "Both images were classified as RECTO (Front side). The VERSO (Back side) is missing."
+                },
+                "data": {
+                    **primary,
+                    "father_name": "Not detected",
+                    "mother_name": "Not detected",
+                    "address": "Not detected",
+                    "civil_act": "Not detected",
+                    "gender": "Not detected",
+                    "nationality": "MAR",
+                    "validation": {
+                        "cnie_cross_verified": False,
+                        "birth_date_mrz_verified": False,
+                        "expiry_date_mrz_verified": False,
+                        "dob_checksum_valid": False,
+                        "expiry_checksum_valid": False,
+                        "mrz_detected": False,
+                        "card_generation": "Front side scan",
+                        "is_affiliated": None,
+                        "affiliation_status": "duplicate_side",
+                        "affiliation_details": "Both images are RECTO (Front). The VERSO side is missing.",
+                        "sides_detected": ["recto", "recto"],
+                        "missing_side": "verso"
+                    }
+                }
+            }
+
+        # Subcase 2B: Duplicate VERSO sides detected (User uploaded two backs!)
+        if side_1 == "verso" and side_2 == "verso":
+            print("[Extraction] Alert: Both uploaded images classified as VERSO. Recto is missing!")
+            verso_1 = self.extract_verso(card_matrices[0], pre_results=raw_1)
+            verso_2 = self.extract_verso(card_matrices[1], pre_results=raw_2)
+            primary = verso_1 if verso_1["cnie_number"] != "Not detected" else verso_2
+            mrz = primary.get("mrz", {})
+            return {
+                "type": "duplicate_verso",
+                "sides_detected": ["verso", "verso"],
+                "missing_side": "recto",
+                "affiliation": {
+                    "is_affiliated": None,
+                    "status": "duplicate_side",
+                    "details": "Both images were classified as VERSO (Back side). The RECTO (Front side) is missing."
+                },
+                "data": {
+                    "cnie_number": primary.get("cnie_number", "Not detected"),
+                    "last_name": mrz.get("last_name") or "Not detected",
+                    "first_name": mrz.get("first_name") or "Not detected",
+                    "gender": mrz.get("gender") or primary.get("visual_gender") or "Not detected",
+                    "nationality": mrz.get("nationality", "MAR"),
+                    "birth_date": mrz.get("birth_date") or "Not detected",
+                    "birth_place": "Not detected",
+                    "expiry_date": mrz.get("expiry_date") or "Not detected",
+                    "photo_path": None,
+                    "father_name": primary.get("father_name", "Not detected"),
+                    "mother_name": primary.get("mother_name", "Not detected"),
+                    "address": primary.get("address", "Not detected"),
+                    "civil_act": primary.get("civil_act", "Not detected"),
+                    "validation": {
+                        "cnie_cross_verified": False,
+                        "birth_date_mrz_verified": False,
+                        "expiry_date_mrz_verified": False,
+                        "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
+                        "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
+                        "mrz_detected": bool(mrz),
+                        "card_generation": "Post-2020 CNIE (Back)" if bool(mrz) else "Pre-2020 CNIE (Back)",
+                        "is_affiliated": None,
+                        "affiliation_status": "duplicate_side",
+                        "affiliation_details": "Both images are VERSO (Back). The RECTO side is missing.",
+                        "sides_detected": ["verso", "verso"],
+                        "missing_side": "recto"
+                    }
+                }
+            }
+
+        # Subcase 2C: One Recto and One Verso
         if side_1 == "verso" and side_2 == "recto":
-            # Inverted upload order: automatically swap!
             recto_mat, recto_raw = card_matrices[1], raw_2
             verso_mat, verso_raw = card_matrices[0], raw_1
         else:
@@ -469,11 +749,8 @@ class OCREngine:
         verso_data = self.extract_verso(verso_mat, pre_results=verso_raw)
         mrz = verso_data.get("mrz", {})
 
-        cnie_match = (
-            recto_data["cnie_number"] != "Not detected"
-            and verso_data["cnie_number"] != "Not detected"
-            and recto_data["cnie_number"] == verso_data["cnie_number"]
-        )
+        # Run Affiliation Cross-Check
+        affiliation = check_affiliation(recto_data, verso_data)
 
         dob_match = (
             recto_data["birth_date"] != "Not detected"
@@ -487,10 +764,15 @@ class OCREngine:
             and recto_data["expiry_date"] == mrz.get("expiry_date")
         )
 
+        resolved_type = "mismatched_pair" if affiliation["is_affiliated"] is False else "full_profile"
+
         return {
-            "type": "full_profile",
+            "type": resolved_type,
+            "sides_detected": ["recto", "verso"],
+            "missing_side": None,
+            "affiliation": affiliation,
             "data": {
-                "cnie_number": recto_data["cnie_number"],
+                "cnie_number": recto_data["cnie_number"] if recto_data["cnie_number"] != "Not detected" else verso_data["cnie_number"],
                 "last_name": recto_data["last_name"],
                 "first_name": recto_data["first_name"],
                 "gender": mrz.get("gender") or verso_data.get("visual_gender") or "Not detected",
@@ -504,12 +786,18 @@ class OCREngine:
                 "address": verso_data["address"],
                 "civil_act": verso_data["civil_act"],
                 "validation": {
-                    "cnie_cross_verified": cnie_match,
+                    "cnie_cross_verified": bool(affiliation.get("cnie_match")),
                     "birth_date_mrz_verified": dob_match,
                     "expiry_date_mrz_verified": expiry_match,
                     "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
                     "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
-                    "mrz_detected": bool(mrz)
+                    "mrz_detected": bool(mrz),
+                    "card_generation": "Post-2020 CNIE" if bool(mrz) else "Pre-2020 CNIE",
+                    "is_affiliated": affiliation["is_affiliated"],
+                    "affiliation_status": affiliation["status"],
+                    "affiliation_details": affiliation["details"],
+                    "sides_detected": ["recto", "verso"],
+                    "missing_side": None
                 },
                 "raw_recto": recto_data,
                 "raw_verso": verso_data
