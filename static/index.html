@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moroccan CNIE OCR & KYC Verification System</title>
+  <meta name="description" content="Production-grade Optical Character Recognition (OCR) and automated KYC identity verification for Moroccan National Identity Cards (CNIE).">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇲🇦</text></svg>">
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <!-- Top Navbar -->
+  <header class="navbar">
+    <a href="/" class="nav-brand">
+      <div class="brand-icon">🇲🇦</div>
+      <div>
+        <span class="brand-title">Moroccan CNIE OCR</span>
+        <span class="brand-badge">Enterprise KYC</span>
+      </div>
+    </a>
+    <div class="nav-actions">
+      <div class="engine-status" id="engineStatus">
+        <span class="status-dot"></span>
+        <span>Engine Ready</span>
+      </div>
+      <a href="/docs" target="_blank" class="nav-btn" title="Open Swagger API documentation">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>API Docs</span>
+      </a>
+      <button class="nav-btn" id="themeToggle" title="Toggle Light/Dark Theme">
+        <span id="themeIcon">☀️</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+    <section class="hero-header">
+      <div class="hero-tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        <span>Card Affiliation & Identity Guard</span>
+      </div>
+      <h1 class="hero-title">Automated Moroccan CIN Verification</h1>
+      <p class="hero-subtitle">
+        Dual-card OCR pipeline with cross-affiliation matching, ICAO 9303 MRZ cryptographic verification, and biometric portrait isolation.
+      </p>
+    </section>
+
+    <div class="dashboard-grid">
+      <!-- Left Panel: Ingestion & Upload -->
+      <section class="panel-card" aria-label="Document Ingestion Panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <h2 class="panel-title">Upload Documents</h2>
+          </div>
+          <span style="font-size: 0.75rem; color: var(--text-dim);">Max 10MB (JPEG/PNG/WebP)</span>
+        </div>
+
+        <!-- Mode Switcher -->
+        <div class="tab-container" role="tablist">
+          <button class="tab-btn active" id="tabDual" role="tab" aria-selected="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            Separate Sides (Recto + Verso)
+          </button>
+          <button class="tab-btn" id="tabComposite" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Composite Scan (Dual or Single)
+          </button>
+        </div>
+
+        <div class="upload-zones-wrapper">
+          <!-- View 1: Dual Zones -->
+          <div id="dualUploadZone" class="dual-zones-row">
+            <!-- Recto Dropzone -->
+            <div class="dropzone" id="rectoDropzone" tabindex="0" role="button" aria-label="Upload Recto (Front) side">
+              <input type="file" id="rectoInput" accept="image/jpeg,image/png,image/webp">
+              <div class="drop-content" id="rectoPlaceholder">
+                <div class="drop-icon-wrapper">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><circle cx="7" cy="8" r="2"></circle><line x1="13" y1="7" x2="19" y2="7"></line><line x1="13" y1="11" x2="17" y2="11"></line></svg>
+                </div>
+                <div class="drop-title">Recto (Front)</div>
+                <div class="drop-subtitle">Drag image or click</div>
+              </div>
+              <div class="preview-container" id="rectoPreview">
+                <div class="preview-overlay">
+                  <button type="button" class="btn-remove-preview" id="rectoRemove" title="Remove image">✕</button>
+                </div>
+                <img id="rectoImg" class="preview-img" alt="Recto Preview">
+                <div class="quality-badge sharp" id="rectoQuality">✓ Sharp Image</div>
+              </div>
+            </div>
+
+            <!-- Verso Dropzone -->
+            <div class="dropzone" id="versoDropzone" tabindex="0" role="button" aria-label="Upload Verso (Back) side">
+              <input type="file" id="versoInput" accept="image/jpeg,image/png,image/webp">
+              <div class="drop-content" id="versoPlaceholder">
+                <div class="drop-icon-wrapper">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="4" y1="13" x2="20" y2="13"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
+                </div>
+                <div class="drop-title">Verso (Back)</div>
+                <div class="drop-subtitle">Drag image or click</div>
+              </div>
+              <div class="preview-container" id="versoPreview">
+                <div class="preview-overlay">
+                  <button type="button" class="btn-remove-preview" id="versoRemove" title="Remove image">✕</button>
+                </div>
+                <img id="versoImg" class="preview-img" alt="Verso Preview">
+                <div class="quality-badge sharp" id="versoQuality">✓ Sharp Image</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 2: Single/Composite Zone -->
+          <div id="compositeUploadZone" style="display: none;">
+            <div class="dropzone" id="singleDropzone" tabindex="0" role="button" aria-label="Upload composite dual-side or single-side scan">
+              <input type="file" id="singleInput" accept="image/jpeg,image/png,image/webp">
+              <div class="drop-content" id="singlePlaceholder">
+                <div class="drop-icon-wrapper">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                </div>
+                <div class="drop-title">Composite Dual Scan or Single Side</div>
+                <div class="drop-subtitle">Auto-splits dual card scans via contour detection</div>
+              </div>
+              <div class="preview-container" id="singlePreview">
+                <div class="preview-overlay">
+                  <button type="button" class="btn-remove-preview" id="singleRemove" title="Remove image">✕</button>
+                </div>
+                <img id="singleImg" class="preview-img" alt="Composite Preview">
+                <div class="quality-badge sharp" id="singleQuality">✓ Sharp Image</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="options-bar">
+          <label class="checkbox-label" title="Receive portrait photo as Base64 string directly in JSON">
+            <input type="checkbox" id="chkBase64">
+            <span>Embed base64 photo (zero-disk transmission)</span>
+          </label>
+        </div>
+
+        <!-- Submit Button -->
+        <button class="btn-action-primary" id="btnExtract" disabled>
+          <div class="spinner" id="btnSpinner"></div>
+          <span id="btnText">Analyze & Verify Document</span>
+        </button>
+      </section>
+
+      <!-- Right Panel: Results & Verification -->
+      <section class="panel-card" aria-label="Identity Results Panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--status-verified-text)" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <h2 class="panel-title">Extracted Profile & Affiliation Status</h2>
+          </div>
+          <span id="latencyBadge" style="font-size: 0.75rem; color: var(--text-dim);">Ready</span>
+        </div>
+
+        <!-- Empty State (Shown initially) -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">🪪</div>
+          <div class="empty-title">No Card Processed Yet</div>
+          <div class="empty-subtitle">Upload your Moroccan CIN scans on the left to extract identity data, cross-validate sides, and crop citizen portrait photo.</div>
+        </div>
+
+        <!-- Results Wrapper (Hidden until extraction) -->
+        <div class="results-wrapper" id="resultsWrapper" style="display: none;">
+          <!-- Affiliation / Security Alert Banner -->
+          <div class="affiliation-banner verified" id="affiliationBanner">
+            <div class="affiliation-icon" id="affIcon">🛡️</div>
+            <div class="affiliation-text">
+              <h4 id="affTitle">Cards Verified & Affiliated</h4>
+              <p id="affDetails">Front and Back sides belong to the same citizen.</p>
+            </div>
+          </div>
+
+          <!-- Citizen ID Card Card -->
+          <div class="citizen-card">
+            <!-- Left: Citizen Photo & Generation Badge -->
+            <div class="citizen-photo-container">
+              <img id="resPhoto" class="citizen-photo" src="" alt="Citizen Portrait">
+              <span class="card-generation-badge" id="resCardGen">Post-2020 CNIE</span>
+            </div>
+
+            <!-- Right: Identity & Lineage Fields -->
+            <div class="fields-sections">
+              <!-- Section 1: Personal Details -->
+              <div>
+                <div class="section-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  Civil Identity (Recto)
+                </div>
+                <div class="fields-grid">
+                  <div class="field-item">
+                    <span class="field-label">CNIE Number</span>
+                    <span class="field-value cnie-val" id="valCnie">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Gender / Nationality</span>
+                    <span class="field-value" id="valGenderNat">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Last Name (Nom)</span>
+                    <span class="field-value" id="valLastName">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">First Name (Prénom)</span>
+                    <span class="field-value" id="valFirstName">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Date of Birth</span>
+                    <span class="field-value" id="valBirthDate">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Place of Birth</span>
+                    <span class="field-value" id="valBirthPlace">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Expiry Date (Validité)</span>
+                    <span class="field-value" id="valExpiryDate">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Card Type</span>
+                    <span class="field-value" id="valCardType">-</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Lineage & Residence -->
+              <div>
+                <div class="section-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                  Lineage & Residence (Verso)
+                </div>
+                <div class="fields-grid">
+                  <div class="field-item">
+                    <span class="field-label">Father's Name (Fils de)</span>
+                    <span class="field-value" id="valFather">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Mother's Name (Et de)</span>
+                    <span class="field-value" id="valMother">-</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Civil Status Act N°</span>
+                    <span class="field-value" id="valCivilAct">-</span>
+                  </div>
+                  <div class="field-item" style="grid-column: 1 / -1;">
+                    <span class="field-label">Registered Residential Address</span>
+                    <span class="field-value" id="valAddress">-</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Cryptographic Integrity Pills -->
+              <div>
+                <div class="section-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+                  Validation & Checksums
+                </div>
+                <div class="integrity-pills-row" id="integrityPills">
+                  <span class="pill-badge pass" id="pillCnie">CNIE Cross-Match: OK</span>
+                  <span class="pill-badge pass" id="pillDob">MRZ DOB: OK</span>
+                  <span class="pill-badge pass" id="pillExp">MRZ Expiry: OK</span>
+                  <span class="pill-badge pass" id="pillDobChk">ICAO 9303 DOB: PASS</span>
+                  <span class="pill-badge pass" id="pillExpChk">ICAO 9303 EXP: PASS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Toolbar -->
+          <div class="action-toolbar">
+            <button class="tool-btn" id="btnCopyJson">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              Copy JSON
+            </button>
+            <button class="tool-btn" id="btnDownloadJson">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download JSON
+            </button>
+            <button class="tool-btn" id="btnReset">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              New Scan
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toastMessage">Action completed</div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

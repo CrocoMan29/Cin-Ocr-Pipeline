@@ -496,17 +496,18 @@ class OCREngine:
         mrz = verso.get("mrz", {})
         affiliation = check_affiliation(recto, verso)
 
+        has_mrz = bool(mrz)
         dob_match = (
             recto["birth_date"] != "Not detected"
             and mrz.get("birth_date") is not None
             and recto["birth_date"] == mrz.get("birth_date")
-        )
+        ) if has_mrz else None
 
         expiry_match = (
             recto["expiry_date"] != "Not detected"
             and mrz.get("expiry_date") is not None
             and recto["expiry_date"] == mrz.get("expiry_date")
-        )
+        ) if has_mrz else None
 
         return {
             "cnie_number": recto["cnie_number"] if recto["cnie_number"] != "Not detected" else verso["cnie_number"],
@@ -526,9 +527,9 @@ class OCREngine:
                 "cnie_cross_verified": bool(affiliation.get("cnie_match")),
                 "birth_date_mrz_verified": dob_match,
                 "expiry_date_mrz_verified": expiry_match,
-                "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
-                "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
-                "mrz_detected": bool(mrz),
+                "dob_checksum_valid": mrz.get("dob_checksum_valid") if has_mrz else None,
+                "expiry_checksum_valid": mrz.get("expiry_checksum_valid") if has_mrz else None,
+                "mrz_detected": has_mrz,
                 "card_generation": "Post-2020 CNIE" if bool(mrz) else "Pre-2020 CNIE",
                 "is_affiliated": affiliation["is_affiliated"],
                 "affiliation_status": affiliation["status"],
@@ -752,17 +753,18 @@ class OCREngine:
         # Run Affiliation Cross-Check
         affiliation = check_affiliation(recto_data, verso_data)
 
+        has_mrz = bool(mrz)
         dob_match = (
             recto_data["birth_date"] != "Not detected"
             and mrz.get("birth_date") is not None
             and recto_data["birth_date"] == mrz.get("birth_date")
-        )
+        ) if has_mrz else None
 
         expiry_match = (
             recto_data["expiry_date"] != "Not detected"
             and mrz.get("expiry_date") is not None
             and recto_data["expiry_date"] == mrz.get("expiry_date")
-        )
+        ) if has_mrz else None
 
         resolved_type = "mismatched_pair" if affiliation["is_affiliated"] is False else "full_profile"
 
@@ -789,9 +791,9 @@ class OCREngine:
                     "cnie_cross_verified": bool(affiliation.get("cnie_match")),
                     "birth_date_mrz_verified": dob_match,
                     "expiry_date_mrz_verified": expiry_match,
-                    "dob_checksum_valid": mrz.get("dob_checksum_valid", False),
-                    "expiry_checksum_valid": mrz.get("expiry_checksum_valid", False),
-                    "mrz_detected": bool(mrz),
+                    "dob_checksum_valid": mrz.get("dob_checksum_valid") if has_mrz else None,
+                    "expiry_checksum_valid": mrz.get("expiry_checksum_valid") if has_mrz else None,
+                    "mrz_detected": has_mrz,
                     "card_generation": "Post-2020 CNIE" if bool(mrz) else "Pre-2020 CNIE",
                     "is_affiliated": affiliation["is_affiliated"],
                     "affiliation_status": affiliation["status"],

@@ -24,6 +24,7 @@ import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
 # Ensure src directory is in sys.path
@@ -135,11 +136,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 5. Mount static directory for serving extracted citizen portraits
+# 5. Mount static directories for frontend assets and extracted citizen portraits
 project_root = os.path.dirname(src_dir)
 faces_dir = os.path.join(project_root, "data", "extracted_faces")
+static_dir = os.path.join(project_root, "static")
 os.makedirs(faces_dir, exist_ok=True)
+os.makedirs(static_dir, exist_ok=True)
+
+# Mount specific faces directory first, then main static directory
 app.mount("/static/extracted_faces", StaticFiles(directory=faces_dir), name="extracted_faces")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 def decode_validated_image(file_bytes: bytes, filename: str) -> np.ndarray:
     """
@@ -155,15 +161,30 @@ def decode_validated_image(file_bytes: bytes, filename: str) -> np.ndarray:
         )
     return img
 
-@app.get("/", tags=["System"])
-async def root():
-    """Service health check and API overview."""
+@app.get("/", tags=["Dashboard"])
+async def dashboard():
+    """Serves the interactive Moroccan CNIE KYC Web Dashboard."""
+    index_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
     return {
         "service": "Moroccan CNIE OCR Microservice",
         "status": "healthy",
-        "version": "1.1.0",
+        "docs_url": "/docs"
+    }
+
+@app.get("/api/v1/health", tags=["System"])
+async def health():
+    """Service health check, feature flags, and API status."""
+    return {
+        "service": "Moroccan CNIE OCR Microservice",
+        "status": "healthy",
+        "version": "1.2.0",
         "docs_url": "/docs",
         "features": [
+            "Interactive KYC Web Dashboard",
+            "Cross-Card Affiliation Verification",
+            "Duplicate & Missing Side Detection",
             "Magic-byte MIME verification",
             "10MB payload size guard",
             "Non-blocking threadpool concurrency",
@@ -292,10 +313,10 @@ async def extract_cin(
         sides_detected=val.get("sides_detected", result_package.get("sides_detected", [])),
         missing_side=val.get("missing_side", result_package.get("missing_side")),
         cnie_cross_verified=val.get("cnie_cross_verified", False),
-        birth_date_mrz_verified=val.get("birth_date_mrz_verified", False),
-        expiry_date_mrz_verified=val.get("expiry_date_mrz_verified", False),
-        dob_checksum_valid=val.get("dob_checksum_valid", False),
-        expiry_checksum_valid=val.get("expiry_checksum_valid", False),
+        birth_date_mrz_verified=val.get("birth_date_mrz_verified"),
+        expiry_date_mrz_verified=val.get("expiry_date_mrz_verified"),
+        dob_checksum_valid=val.get("dob_checksum_valid"),
+        expiry_checksum_valid=val.get("expiry_checksum_valid"),
         mrz_detected=val.get("mrz_detected", False),
         card_generation=card_gen
     )

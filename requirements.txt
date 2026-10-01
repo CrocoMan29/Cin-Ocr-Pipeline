@@ -6,3 +6,7 @@ pytz==2026.4
 six==1.17.0
 tzdata==2026.4
 easyocr>=1.7.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
+python-multipart>=0.0.9
+pydantic>=2.6.0
