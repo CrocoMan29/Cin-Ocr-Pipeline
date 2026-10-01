@@ -1,0 +1,43 @@
+# 1. Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. Virtual Environments (CRITICAL)
+myenv/
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 3. Environment Variables & Secrets
+.env
+.env.*
+*.env
+
+# 4. OS and IDE specific files
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 5. Data, PII & Face Extraction Artifacts
+data/extracted_faces/
+data/*.jpg
+data/*.jpeg
+data/*.png
+data/*.webp
+*.log
+*.sqlite3
+
+# 6. Deep Learning & Model Artifacts
+.EasyOCR/
+.cache/
+*.pt
+*.pth
+*.onnx
