@@ -1,0 +1,28 @@
+# docker-compose.yml
+# Multi-container / production orchestration for Moroccan CNIE OCR Microservice
+
+services:
+  cnie-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: moroccan-cnie-ocr:1.2.0
+    container_name: cnie_ocr_pipeline
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount host directories to persist face portraits and batch audit reports
+      - ./data/extracted_faces:/app/data/extracted_faces
+      - ./reports:/app/reports
+      # Share host EasyOCR models to start container instantly with zero network download
+      - ~/.EasyOCR:/root/.EasyOCR
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

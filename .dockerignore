@@ -1,0 +1,25 @@
+# .dockerignore
+# 1. Virtual Environments
+myenv/
+venv/
+.venv/
+env/
+
+# 2. Git & OS Metadata
+.git/
+.gitignore
+.DS_Store
+._*
+.idea/
+.vscode/
+
+# 3. Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 4. Ephemeral Reports & Face Photos
+reports/*.csv
+reports/*.json
+data/extracted_faces/photo_*
+*.log
